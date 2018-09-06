@@ -21,7 +21,7 @@
 #include <QClipboard>
 #include <util.h>
 
-#define DEBUG_SWITCH 0
+#define DEBUG_SWITCH 1
 
 static int MODE_FUZZY = 0;
 static int MODE_NORMAL = 1;
@@ -38,7 +38,8 @@ MainWindow::MainWindow(QWidget *parent,QStringList flist) :
     sizeChanged(false),
     sTimer(NULL),
     selectWholeQuery(NULL),
-    hasOpenedFile(false)
+    hasOpenedFile(false),
+    currentFindIdIndex(0)
 {
     ui->setupUi(this);
 
@@ -58,11 +59,21 @@ MainWindow::MainWindow(QWidget *parent,QStringList flist) :
     }
 }
 
+MainWindow::~MainWindow()
+{
+    delete ui;
+    if(sqliteDB.isOpen())
+        sqliteDB.close();
+    if(QSqlDatabase::contains("show_logcat"))
+        QSqlDatabase::removeDatabase("show_logcat");
+}
+
 bool MainWindow::initSql(const QString& table,const QString& where)
 {
     if(!sqliteDB.isOpen())
         return false;
     totalCount = getCountFromQuery(table,where);
+    updateLineAndPage();
     return execSql(table,where);
 }
 
@@ -81,7 +92,6 @@ int MainWindow::binarySearch(int index)
     {
         if(key==idListToSearch.at((index1+index2)/2))
         {
-            qDebug()<<"find"<<endl;
             return (index1+index2)/2;
         }else if(key<idListToSearch.at((index1+index2)/2))
         {
@@ -90,16 +100,19 @@ int MainWindow::binarySearch(int index)
         {
             index1 = (index1+index2)/2 + 1;
         }
-        qDebug()<<index1<<" "<<index2<<endl;
     }
-    qDebug()<<"not found"<<endl;
     return -1;
 }
 
-
 void MainWindow::initFindList()
 {
+    if(ui->etFind->text().isEmpty())
+        return;
+
     QString where = getSearchAndFindSqlString();
+    if(lastFindWhere == where)
+        currentFindIdIndex = 0;
+    lastFindWhere = where;
     qDebug()<<"search find sql: "<<where;
     QString sql = where.isEmpty()?
                 QString("select id from logcat"):
@@ -127,17 +140,46 @@ void MainWindow::initFindList()
     {
         idListToFind.append(sqlQuery.value(0).toInt());
     }
-    qDebug()<<idListToFind;
+    //qDebug()<<idListToFind;
     qDebug()<<"存储 FIND ID COUNT:"<<idListToFind.size()<<" 耗时:"<<time.elapsed()<<"ms";
 
-    int line = binarySearch(0);
+    if(idListToFind.count() == 0)
+        return;
+
+
+    gotoFindLine((currentFindIdIndex++)%idListToFind.count());
+
+}
+
+void MainWindow::gotoPrevFind()
+{
+    if(ui->etFind->text().isEmpty())
+        return;
+    if(idListToFind.isEmpty()||idListToSearch.isEmpty())
+        return;
+    int cindex = (currentFindIdIndex--)%idListToFind.count();
+    if(cindex < 0)
+        cindex = cindex + idListToFind.count();
+    gotoFindLine(cindex);
+}
+
+void MainWindow::gotoNextFind(){
+    if(ui->etFind->text().isEmpty())
+        return;
+    if(idListToFind.isEmpty()||idListToSearch.isEmpty())
+        return;
+    gotoFindLine((currentFindIdIndex++)%idListToFind.count());
+}
+
+void MainWindow::gotoFindLine(int index)
+{
+    int line = binarySearch(index);
     if(line >= 0)
         gotoLine(line+1);
     else
     {
         qDebug()<<"not find!!";
     }
-
 }
 
 bool MainWindow::execSql(const QString& table,const QString& where)
@@ -290,7 +332,7 @@ void MainWindow::commonInit()
     setWindowIcon(QIcon(":/logo.ico"));
 
     lwContent = ui->lwContent;
-    lwContent->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    //lwContent->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
     mCurRange = new ItemsRange(this,0,0,0,0,0);
     isConnectScroll(true);
@@ -301,6 +343,9 @@ void MainWindow::commonInit()
     connect(ui->cbMode,SIGNAL(currentIndexChanged(int)),this,SLOT(cbModeChangeSlot(int)));
     connect(ui->lwContent,SIGNAL(currentTextChanged(QString)),this,SLOT(currentTextContentChangedSlot(QString)));
     connect(ui->etFind,SIGNAL(editingFinished()),this,SLOT(initFindList()));
+
+    connect(ui->prev,SIGNAL(clicked(bool)),this,SLOT(gotoPrevFind()));
+    connect(ui->next,SIGNAL(clicked(bool)),this,SLOT(gotoNextFind()));
 }
 
 void MainWindow::connectUpdateLineSlot(bool flag)
@@ -404,7 +449,6 @@ void MainWindow::createActionAndMenu()
     QAction *lastPageAction;
 
     QAction *copyCurrentPageAction;
-    QAction *copyCurrentLineAction;
 
     QAction *gotoPrePageAction;
     QAction *gotoNextPageAction;
@@ -428,10 +472,6 @@ void MainWindow::createActionAndMenu()
     copyCurrentPageAction = new QAction("复制当前页",this);
     copyCurrentPageAction->setShortcut(Qt::Key_F5);
     connect(copyCurrentPageAction,SIGNAL(triggered(bool)),this,SLOT(clipCurrentPage()));
-
-//    copyCurrentLineAction = new QAction("复制当前行",this);
-//    copyCurrentLineAction->setShortcut(Qt::Key_F6);
-//    connect(copyCurrentLineAction,SIGNAL(triggered(bool)),this,SLOT(clipCurrentLine()));
 
 
     firstPageAction = new QAction("第一页",this);
@@ -461,7 +501,6 @@ void MainWindow::createActionAndMenu()
     QMenu *queryMenu = menuBar()->addMenu(tr("查看"));
     queryMenu->addAction(fullscreenAction);
     queryMenu->addAction(hidemenuAction);
-//    queryMenu->addAction(copyCurrentLineAction);
     queryMenu->addAction(copyCurrentPageAction);
 
     queryMenu->addAction(firstPageAction);
@@ -576,7 +615,7 @@ void MainWindow::beginSearch()
 
     lastSql = sql;
     if(flag)
-        dispContainSearchString("");
+        dispContainSearchString();
 }
 
 QString MainWindow::getFindSqlString()
@@ -677,7 +716,7 @@ void MainWindow::selfVerticalScrollSlot(int value)
         direction = -1;
     }
 
-    //logCurTime("由" + QString::number(mLastScrollValue) + " >> " + QString::number(value));
+    logCurTime("由" + QString::number(mLastScrollValue) + " >> " + QString::number(value));
     //如果是向下滑动
     if (direction == 1) {
         int first = mCurRange->getFirst();
@@ -734,6 +773,7 @@ void MainWindow::reDispAreaData()
     dispAreaData(mCurRange,0);
 }
 
+//绘制当前区域
 void MainWindow::dispAreaData(ItemsRange *range, int direction)
 {
     static bool flag = false;
@@ -781,7 +821,6 @@ void MainWindow::dispAreaData(ItemsRange *range, int direction)
             item->setTextColor(color);
             if(!selectWholeQuery->next())
             {
-                qDebug()<<"error break;";
                 break;
             }
         }
@@ -796,11 +835,12 @@ void MainWindow::dispAreaData(ItemsRange *range, int direction)
         if (direction == 1) {
             lwContent->scrollToTop();
             lwContent->setCurrentRow(range->getVisibleFirst() + range->getPageItemNum() - 2 - first);
+            qDebug()<<"向上："<<range->getVisibleFirst() + range->getPageItemNum() - 2 - first;
         } else {
             lwContent->scrollToBottom();
             lwContent->setCurrentRow(range->getVisibleFirst() - first);
+            qDebug()<<"向下："<<range->getVisibleFirst() - first;
         }
-
         //重新设定滚动条的位置
         ui->verticalScrollBar->setValue(range->getVisibleFirst());
     }
@@ -810,45 +850,28 @@ void MainWindow::dispAreaData(ItemsRange *range, int direction)
 
     isConnectScroll(true);
 
-    //如果显示范围是：0,0,-1，且当前应该是有数据的，则立即恢复显示
-    if ((first == 0) && (range->getVisibleFirst() == 0) && (last == -1)) {
-        if ((totalCount > 0) && (flag == false)) {
-            flag = true;
-            logCurTime("当前显示范围：0,0,-1，进一步检查是否真的无数据显示...");
-            dispContainSearchString(ui->etSearch->text());
-        } else {
-            flag = false;
-        }
-    } else {
-        flag = false;
-    }
-    updateLineAndPage();
 }
 
+//本函数更新当前缓冲区的范围，仅仅在 dispContainSearchString 中调用，在窗口高度变化的时候，应该调用此函数
 void MainWindow::updateCurRange()
 {
-    //if (lwFilter->count() > 0) {
-        int visibleHeight = lwContent->height();        //获取内容显示区的总高度
-        int itemHeight = tagListView->getWidgetList()->sizeHintForRow(0);   //获取一行所占的高度getCountFromQuery
-        int visibleItemNum = visibleHeight / itemHeight;//计算可完整显示的行数
+    int visibleHeight = lwContent->height();        //获取内容显示区的总高度
+    int itemHeight = tagListView->getWidgetList()->sizeHintForRow(0);
+    int visibleItemNum = visibleHeight / itemHeight;//计算可完整显示的行数
 
-        if (visibleItemNum < 0) {
-            visibleItemNum = 0;
-        }
-        if(visibleItemNum > 0)
-            totalPage = totalCount/visibleItemNum + 1;
+    if (visibleItemNum < 0) {
+        visibleItemNum = 0;
+    }
+    if(visibleItemNum > 0)
+        totalPage = totalCount/visibleItemNum + 1;
 
-        //更新当前显示缓冲区范围
-        int first = mCurRange->getFirst();
-        int visibleFirst = mCurRange->getVisibleFirst();
-        int count = visibleItemNum + visibleItemNum / 2;
-//        qDebug()<<"visibleHeight:"<<visibleHeight;
-//        qDebug()<<"itemHeight:"<<itemHeight;
-//        qDebug()<<"visibleItemNum:"<<visibleItemNum;
-//        qDebug()<<"count:"<<count;
-        delete mCurRange;
-        mCurRange = new ItemsRange(this,first,visibleFirst,count,visibleItemNum,totalCount/*mCurLevels.size()*/);
-    //}
+    //更新当前显示缓冲区范围
+    int first = mCurRange->getFirst();
+    int visibleFirst = mCurRange->getVisibleFirst();
+    int count = visibleItemNum + visibleItemNum / 2;
+    delete mCurRange;
+    mCurRange = new ItemsRange(this,first,visibleFirst,count,visibleItemNum,totalCount);
+    updateLineAndPage();
 }
 
 void MainWindow::verticalScrollSlot(int value)
@@ -860,25 +883,37 @@ void MainWindow::verticalScrollSlot(int value)
     int pageItemNum = mCurRange->getPageItemNum();
     delete mCurRange;
     mCurRange = new ItemsRange(this,first,visibleFirst,count,pageItemNum,totalCount);
-    dispAreaData(mCurRange,0);
+    dispAreaData(mCurRange,-1);
 }
 
-void MainWindow::dispContainSearchString(QString str)
+void MainWindow::gotoLine(int line)
 {
-    //if (mAllLines > 0) {
-        //加载大于等于某一日志等级且指定Tag的所有日志信息
-        //loadLevelMessage(ui->cbLevel->currentText(), mCurFilters.at(ui->lwFilter->currentRow()));
-
-        updateCurRange();   //更新当前显示缓冲区范围
-
-
-        //updateTimeStringToWidget(mStartTime,mStopTime);
-
-        //显示当前数据表
-        dispCurDataList();
-   // }
+    qDebug()<<"gotoLine: "<<line;
+    int first = mCurRange->getFirst();
+    int visibleFirst = mCurRange->getVisibleFirst();
+    int count = mCurRange->getCount();
+    int pageItemNum = mCurRange->getPageItemNum();
+    if(line < 0 || line >= mCurRange->getTotal())
+        return;
+    isConnectScroll(false);
+    visibleFirst = line - 1;
+    first = (visibleFirst > 0) ? (visibleFirst - 1) : visibleFirst;
+    delete mCurRange;
+    mCurRange = new ItemsRange(this,first,visibleFirst,count,pageItemNum,totalCount);
+    dispAreaData(mCurRange,0);
+    isConnectScroll(true);
 }
 
+void MainWindow::dispContainSearchString()
+{
+    if(totalCount > 0)
+    {
+        updateCurRange();
+        dispCurDataList();
+    }
+}
+
+//设置滚动条最大值，以及显示和隐藏，应该在每次重新搜索后调用此函数
 void MainWindow::dispCurDataList()
 {
     //计算滚动条的最大值
@@ -891,9 +926,6 @@ void MainWindow::dispCurDataList()
         ui->verticalScrollBar->setHidden(true);
         ui->verticalScrollBar->setRange(0,0);
     }
-
-    //autoAdjustTitleLabel();     //自动调节标题标签的位置
-
     dispAreaData(mCurRange,0);  //将显示缓冲区的数据显示到屏幕
 }
 
@@ -921,15 +953,6 @@ void MainWindow::showOrHideFilterWindow()
 void MainWindow::showOrHideConsoleWindow()
 {
     showOrHideWindow(consoleDock);
-}
-
-MainWindow::~MainWindow()
-{
-    delete ui;
-    if(sqliteDB.isOpen())
-        sqliteDB.close();
-    if(QSqlDatabase::contains("show_logcat"))
-        QSqlDatabase::removeDatabase("show_logcat");
 }
 
 void MainWindow::logCurTime(QString text)
@@ -967,10 +990,11 @@ void MainWindow::showMenuSlot()
 void MainWindow::resizeEvent(QResizeEvent * event)
 {
     sizeChanged = true;
-    beginSearch();
+    dispContainSearchString();
     sizeChanged = false;
 }
 
+//更新总行数和页数
 void MainWindow::updateLineAndPage()
 {
     lineTotalLabel->setText(QString::number(totalCount));
@@ -1002,26 +1026,6 @@ void MainWindow::updateByPage()
     int goPageNum = pageCurrentEdit->text().toInt();
     if(mCurRange != NULL)
         gotoLine(goPageNum*mCurRange->getPageItemNum());
-}
-
-void MainWindow::gotoLine(int line)
-{
-    qDebug()<<"gotoLine: "<<line;
-    int first = mCurRange->getFirst();
-    int visibleFirst = mCurRange->getVisibleFirst();
-    int count = mCurRange->getCount();
-    int pageItemNum = mCurRange->getPageItemNum();
-    if(line < 0 || line > mCurRange->getTotal())
-        return;
-    isConnectScroll(false);
-    visibleFirst = line-pageItemNum/2;
-    if(visibleFirst < 0)
-        visibleFirst = 0;
-    first = (visibleFirst > 0) ? (visibleFirst - 1) : visibleFirst;
-    delete mCurRange;
-    mCurRange = new ItemsRange(this,first,visibleFirst,count,pageItemNum,totalCount);
-    dispAreaData(mCurRange,0);
-    isConnectScroll(true);
 }
 
 void MainWindow::initPidList()

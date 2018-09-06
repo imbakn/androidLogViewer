@@ -56,6 +56,8 @@ private slots:
     void reDispAreaData();
 
     void initFindList();
+    void gotoPrevFind();
+    void gotoNextFind();
 protected:
     void resizeEvent(QResizeEvent * event);
 private:
@@ -90,7 +92,7 @@ private:
     //main function
     void dispAreaData(ItemsRange *range, int direction);
     void updateCurRange();
-    void dispContainSearchString(QString str);
+    void dispContainSearchString();
     void dispCurDataList();
     void gotoLine(int line);
     int binarySearch(int key);
@@ -142,8 +144,9 @@ private:
 
     QList<int> idListToSearch;
     QList<int> idListToFind;
-    int currentFindId;
     int currentFindIdIndex;
+    QString lastFindWhere;
+    void gotoFindLine(int index);
 
 
 
