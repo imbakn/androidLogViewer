@@ -8,7 +8,6 @@
 #include <QPushButton>
 #include <QSqlTableModel>
 #include <QTableView>
-#include "tableeditor.h"
 #include <QDebug>
 #include <QDateTime>
 #include <QMenu>
@@ -84,7 +83,7 @@ int MainWindow::binarySearch(int index)
         {
             qDebug()<<"find"<<endl;
             return (index1+index2)/2;
-        }else if(key<idListToSearch.at(index1+index2)/2)
+        }else if(key<idListToSearch.at((index1+index2)/2))
         {
             index2 = (index1+index2)/2 - 1;
         }else
@@ -101,6 +100,7 @@ int MainWindow::binarySearch(int index)
 void MainWindow::initFindList()
 {
     QString where = getSearchAndFindSqlString();
+    qDebug()<<"search find sql: "<<where;
     QString sql = where.isEmpty()?
                 QString("select id from logcat"):
                 QString("select id from logcat where %1").arg(where);
@@ -127,10 +127,16 @@ void MainWindow::initFindList()
     {
         idListToFind.append(sqlQuery.value(0).toInt());
     }
+    qDebug()<<idListToFind;
     qDebug()<<"存储 FIND ID COUNT:"<<idListToFind.size()<<" 耗时:"<<time.elapsed()<<"ms";
 
     int line = binarySearch(0);
-    gotoLine(line);
+    if(line >= 0)
+        gotoLine(line+1);
+    else
+    {
+        qDebug()<<"not find!!";
+    }
 
 }
 

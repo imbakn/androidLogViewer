@@ -59,20 +59,20 @@ QString Util::getSqliteQueryStringLike(QString data,const QString& prefix,const 
         foreach (QString var, listString) {
             if(var.startsWith("^"))
             {
-                queryString.append(QString("%1 not like \'\%%2\%\'").arg(colume).arg(var.remove("^")));
+                queryString.append(QString("%1 not like \'\%%2\%\'").arg(colume).arg(var.remove("^").replace("\`"," ")));
             }else
             {
-                queryString.append(QString("%1 like \'\%%2\%\'").arg(colume).arg(var));
+                queryString.append(QString("%1 like \'\%%2\%\'").arg(colume).arg(var.replace("\`"," ")));
             }
         }
         return QString(" ( %1 ) ").arg(queryString.join(" or "));
     }else if(content.startsWith("^"))
     {
-        return QString("%1 not like \'\%%2\%\'").arg(colume).arg(content.remove("^"));
+        return QString("%1 not like \'\%%2\%\'").arg(colume).arg(content.remove("^").replace("\`"," "));
     }
     else
     {
-        return QString("%1 like \'\%%2\%\'").arg(colume).arg(content);
+        return QString("%1 like \'\%%2\%\'").arg(colume).arg(content.replace("\`"," "));
     }
 
     return "";
