@@ -2,6 +2,9 @@
 #include <QStringList>
 #include <QString>
 #include <QFile>
+#include <QDebug>
+#include <QDateTime>
+#define DEBUG_SWITCH 1
 
 static int LEVEL_VERBOSE = 0;
 static int LEVEL_DEBUG = 1;
@@ -201,3 +204,9 @@ QByteArray Util::fetchQrc(const QString &fileName)
     return file.readAll();
 }
 
+void Util::logCurTime(QString text)
+{
+#if DEBUG_SWITCH
+    qDebug()<<"【" + QDateTime::currentDateTime().toString("hh:mm:ss.zzz") + "】" + text;
+#endif
+}

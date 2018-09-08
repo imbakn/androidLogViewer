@@ -1,0 +1,163 @@
+QMainWindow, 
+QAbstractItemView,  
+QTreeView::branch, 
+QStackWidget,
+QAbstractItemView::item:selected {
+        color: #EAEAEA;
+        background-color: rgb(63,63,70);
+        border:none;
+}
+
+/* ScrollBar style */
+QScrollBar {
+     border: none;
+     background: rgb(62,62,62);
+     height: 6px;
+     width: 12px;
+     margin: 0px;
+}
+QScrollBar::handle{
+     background: rgb(104, 104, 104);
+     min-width: 10px;
+     min-height: 10px;
+}
+QScrollBar::handle:hover{
+     background: rgb(158, 158, 158);
+}
+QScrollBar::handle:hover:pressed{
+     background: rgb(239, 239, 239);
+}
+QScrollBar::add-line,  QScrollBar::sub-line {
+     background: none;
+     border: none;
+}
+QScrollBar::add-page, QScrollBar::sub-page {
+     background: none;
+}
+
+QTreeView::branch:closed:adjoins-item:has-children {
+     background:  solid #777777;
+     margin: 6px;
+     height: 6px;
+     width: 6px;
+}
+
+QHeaderView::section {
+     background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                       stop:0 #616161, stop: 0.5 #505050,
+                                       stop: 0.6 #434343, stop:1 #656565);
+     color: white;
+     padding-left: 4px;
+     border: 1px solid #6c6c6c;
+}
+
+QToolBar {
+     border-style: solid;
+     border-style: outset;
+     color: #EAEAEA;
+     background: #333333;
+     font-size: 9pt;
+}
+
+/* The code editor background */
+QPlainTextEdit {
+  background-color: rgb(30,30,30); 
+}
+
+QObject[windowTitle="File System"] QWidget 
+{
+    color: #EAEAEA;
+}
+
+/* search result panel */
+QObject[windowTitle="Search Results"] QWidget
+{
+    color: #FFFFFF;
+    background: rgb(30, 30, 30);
+}
+
+QWidget[windowTitle="Compile Output"],
+QWidget[windowTitle="Version Control"],
+QWidget[windowTitle="QML/JS Console"]
+{
+    color: #EAEAEA;
+    background: rgb(30, 30, 30);
+}
+
+QTextEdit {
+    background: rgb(50, 50, 50);
+    color: #FFFFFF
+}
+QLineEdit {
+    background: rgb(50, 50, 50);
+    color: #FFFFFF
+}
+
+QPushButton {  
+    color:white;
+    border-radius:1px;
+    background-color:rgb(37, 37, 37);
+}  
+
+QPushButton:pressed {  
+    background-color:rgb(60, 60, 60);
+}
+QPushButton:checked {  
+    background-color:rgb(0,0,0);
+}
+QComboBox{
+    color:white;
+    background: rgb(50, 50, 50);
+}
+
+QMenuBar{
+    color:white;
+    background: rgb(50, 50, 50);
+}
+
+QLabel{
+    color:white;
+    background: rgb(50, 50, 50);
+}
+
+
+QStatusBar{
+    color:white;
+    background: rgb(50, 50, 50);
+}
+QCheckBox{
+    color:white;
+    background: rgb(50, 50, 50);
+}
+
+QTabBar::tab{
+
+    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                                stop: 0 #E1E1E1, stop: 0.4 #DDDDDD,
+                                stop: 0.5 #D8D8D8, stop: 1.0 #D3D3D3);
+    border: 2px solid #C4C4C3;
+    border-bottom-color: #C2C7CB; /* same as the pane color */
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+    min-width: 8ex;
+    padding: 2px;
+}
+
+QTabBar::tab:!selected {
+    margin-top: 2px;
+}
+
+QTabBar::tab:selected {
+    font: bold;
+    color: #0000ea;
+}
+
+QTabWidget{
+    color:white;
+    background: rgb(50, 50, 50);
+    border:none;
+    margin-top: 0px;
+    margin-bottom: 0px;
+    margin-left: 0px;
+    margin-right: 0px;
+}

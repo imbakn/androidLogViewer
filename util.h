@@ -18,6 +18,7 @@ public:
     static QByteArray fetchQrc(const QString &fileName);
     static QString getLevelSql(int level);
     static int getLevelIndex(QString logLevel);
+    static void logCurTime(QString text);
 };
 
 #endif // UTIL_H

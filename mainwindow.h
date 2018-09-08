@@ -10,6 +10,8 @@
 #include <QPushButton>
 #include <QTimer>
 
+class DataBaseManager;
+
 namespace Ui {
 class MainWindow;
 }
@@ -40,7 +42,6 @@ private slots:
     void currentTextContentChangedSlot(QString text);
     void tagListViewComboChangedSlot(QString text);
     void loadFileSlot();
-    void loadFile(const QString& file,const QString& sqlFileName="");
     bool closeFileSlot();
     void clipCurrentPage();
     void clipCurrentLine();
@@ -122,15 +123,17 @@ private:
     int currentLine;
     QString currentLineText;
     int currentPage;
-    QStringList pidList;
     void initPidList();
+
+    QStringList *pidList;
     QList< QPair<QString,int> > * getTagList(const QString& where);
+
+
     void initTagList(int pid);
     QString lastSql;
     bool sizeChanged;
     QTimer *sTimer;
 
-    QSqlDatabase sqliteDB;
     QSqlQuery *selectWholeQuery;
 
     bool loadTextFile(const QString& filename, const QString& sqlFileName="");
@@ -148,7 +151,7 @@ private:
     QString lastFindWhere;
     void gotoFindLine(int index);
 
-
+    DataBaseManager *dbManager;
 
 };
 

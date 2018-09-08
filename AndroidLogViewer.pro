@@ -30,18 +30,29 @@ SOURCES += \
         mainwindow.cpp \
     itemsrange.cpp \
     taglistview.cpp \
-    util.cpp
+    util.cpp \
+    toolbar.cpp \
+    loglist.cpp \
+    logview.cpp \
+    databasemanager.cpp
 
 HEADERS += \
         mainwindow.h \
     itemsrange.h \
     taglistview.h \
-    util.h
+    util.h \
+    toolbar.h \
+    loglist.h \
+    logview.h \
+    databasemanager.h
 
 
 FORMS += \
         mainwindow.ui \
-    taglistview.ui
+    taglistview.ui \
+    toolbar.ui \
+    loglist.ui \
+    logview.ui
 
 DISTFILES += \
     README \

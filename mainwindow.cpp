@@ -20,12 +20,9 @@
 #include <QSqlError>
 #include <QClipboard>
 #include <util.h>
+#include "databasemanager.h"
 
 #define DEBUG_SWITCH 1
-
-static int MODE_FUZZY = 0;
-static int MODE_NORMAL = 1;
-static int MODE_SQL = 2;
 
 MainWindow::MainWindow(QWidget *parent,QStringList flist) :
     QMainWindow(parent),
@@ -39,10 +36,11 @@ MainWindow::MainWindow(QWidget *parent,QStringList flist) :
     sTimer(NULL),
     selectWholeQuery(NULL),
     hasOpenedFile(false),
-    currentFindIdIndex(0)
+    currentFindIdIndex(0),
+    pidList(new QStringList())
 {
     ui->setupUi(this);
-
+    dbManager = new DataBaseManager();
     InitWindow();
 
     //创建日志等级颜色配色表
@@ -57,22 +55,33 @@ MainWindow::MainWindow(QWidget *parent,QStringList flist) :
     {
         loadFiles(flist);
     }
+
+//    LogView *logview1 = new LogView(this);
+//    LogView *logview2 = new LogView(this);
+//    QLabel *analize = new QLabel(this);
+//    analize->setText(tr("分析界面"));
+//    QTabWidget * tabWidget = new QTabWidget(this);
+//    tabWidget->addTab(logview1,tr("View1"));
+//    tabWidget->addTab(logview2,tr("View2"));
+//    tabWidget->addTab(analize,tr("分析"));
+//    this->setCentralWidget(tabWidget);
+
+
 }
 
 MainWindow::~MainWindow()
 {
     delete ui;
-    if(sqliteDB.isOpen())
-        sqliteDB.close();
+    dbManager->close();
     if(QSqlDatabase::contains("show_logcat"))
         QSqlDatabase::removeDatabase("show_logcat");
 }
 
 bool MainWindow::initSql(const QString& table,const QString& where)
 {
-    if(!sqliteDB.isOpen())
+    if(!dbManager->isOpen())
         return false;
-    totalCount = getCountFromQuery(table,where);
+    totalCount = dbManager->getCountFromQuery(table,where);
     updateLineAndPage();
     return execSql(table,where);
 }
@@ -117,7 +126,7 @@ void MainWindow::initFindList()
     QString sql = where.isEmpty()?
                 QString("select id from logcat"):
                 QString("select id from logcat where %1").arg(where);
-    QSqlQuery sqlQuery(sqliteDB);
+    QSqlQuery sqlQuery(*dbManager->getDatabase());
     QString noLevelStr = getSearchSqlString();
     noLevelStr = noLevelStr.remove("\'V\'").remove("\'D\'").remove("\'I\'").remove("\'W\'").remove("\'E\'").remove("\'F\'");
     if(noLevelStr.toLower() == noLevelStr)
@@ -184,30 +193,27 @@ void MainWindow::gotoFindLine(int index)
 
 bool MainWindow::execSql(const QString& table,const QString& where)
 {
-    if(!sqliteDB.isOpen())
+    if(!dbManager->isOpen())
         return false;
     QString sql = where.isEmpty()?
                 QString("select * from %1").arg(table):
                 QString("select * from %1 where %2").arg(table).arg(where);
     if(selectWholeQuery != NULL)
         delete selectWholeQuery;
-    selectWholeQuery = new QSqlQuery(sqliteDB);
+    selectWholeQuery = new QSqlQuery(*dbManager->getDatabase());
     QString noLevelStr = where;
     noLevelStr = noLevelStr.remove("\'V\'").remove("\'D\'").remove("\'I\'").remove("\'W\'").remove("\'E\'").remove("\'F\'");
     if(noLevelStr.toLower() == noLevelStr)
     {
-        //qDebug()<<"PRAGMA case_sensitive_like=0";
         selectWholeQuery->prepare("PRAGMA case_sensitive_like=0");
     }
     else
     {
-        //qDebug()<<"PRAGMA case_sensitive_like=1";
         selectWholeQuery->prepare("PRAGMA case_sensitive_like=1");
     }
 
     if(!selectWholeQuery->exec(sql))
     {
-        qDebug()<<selectWholeQuery->lastError();
         return false;
     }
     QTime time;
@@ -220,51 +226,6 @@ bool MainWindow::execSql(const QString& table,const QString& where)
     qDebug()<<"存储ID COUNT:"<<idListToSearch.size()<<" 耗时:"<<time.elapsed()<<"ms";
     initFindList();
     return true;
-}
-
-bool MainWindow::isTableExist(QString table)
-{
-    QString select_count_sql = QString("select count(*) from sqlite_master where type=\'table\' and name =\'%1\'").arg(table);
-    QSqlDatabase database = QSqlDatabase::database("loading");
-    QSqlQuery query(database);
-    if(!query.exec(select_count_sql))
-    {
-        qDebug()<<query.lastError();
-        return false;
-    }
-    else
-    {
-        if(query.next())
-        {
-            return (query.value(0).toInt()>0);
-        }else
-        {
-            return false;
-        }
-    }
-}
-
-int MainWindow::getCountFromQuery(const QString& table,const QString& where)
-{
-    QString select_count_sql = where.isEmpty()?
-                QString("select count(*) from %1").arg(table):
-                QString("select count(*) from %1 where %2").arg(table).arg(where);
-    QSqlQuery query(sqliteDB);
-    if(!query.exec(select_count_sql))
-    {
-        qDebug()<<query.lastError();
-        return -1;
-    }
-    else
-    {
-        if(query.next())
-        {
-            return query.value(0).toInt();
-        }else
-        {
-            return -1;
-        }
-    }
 }
 
 void MainWindow::InitWindow()
@@ -280,7 +241,7 @@ void MainWindow::InitWindow()
 void MainWindow::initTagListDock()
 {
     initPidList();
-    tagListView->getQComboBox()->addItems(pidList);
+    tagListView->getQComboBox()->addItems(*pidList);
     initTagList(-1);
     disconnect(tagListView->getQComboBox(),SIGNAL(currentTextChanged(QString)),this,SLOT(tagListViewComboChangedSlot(QString)));
     disconnect(tagListView->getWidgetList(),SIGNAL(currentRowChanged(int)),this,SLOT(delaySearch()));
@@ -381,13 +342,12 @@ void MainWindow::currentTextContentChangedSlot(QString text)
 
 void MainWindow::cbLevelChangeSlot(int index)
 {
-    //qDebug()<<"cbLevelChangeSlot: "<<index;
     beginSearch();
 }
 
 void MainWindow::cbModeChangeSlot(int index)
 {
-    if(index == MODE_FUZZY)
+    if(index == DataBaseManager::MODE_FUZZY)
     {
         tagListView->setDisabled(false);
         tagListDock->show();
@@ -620,18 +580,7 @@ void MainWindow::beginSearch()
 
 QString MainWindow::getFindSqlString()
 {
-    QString sql = "";
-    QString find = ui->etFind->text().trimmed();
-
-    if(!find.isEmpty())
-    {
-        QStringList argList = find.split(' ');
-        qDebug()<<argList;
-        sql = Util::getNormalQueryString(argList);
-    }
-    qDebug()<<"The find sql: "<<sql;
-
-    return sql;
+    return dbManager->getFindSqlString(ui->etFind->text().trimmed());
 }
 
 QString MainWindow::getSearchAndFindSqlString()
@@ -649,64 +598,17 @@ QString MainWindow::getSearchAndFindSqlString()
 
 QString MainWindow::getSearchSqlString()
 {
-    QString sql = "";
-    QString search = ui->etSearch->text().trimmed();
-    if(getQueryMode()==MODE_NORMAL)
-    {
-        if(!search.isEmpty())
-        {
-            QStringList argList = search.split(' ');
-            qDebug()<<argList;
-            sql = Util::getNormalQueryString(argList);
-        }
-    }else if(getQueryMode()==MODE_SQL)
-    {
-        sql = search;
-    }else if(getQueryMode()==MODE_FUZZY)
-    {
-        QStringList queryList;
-        if(!search.isEmpty())
-        {
-            QStringList argList = search.split(' ');
-            qDebug()<<argList;
-            foreach (QString arg, argList) {
-                arg = arg.trimmed();
-                if(arg.isEmpty())
-                    continue;
-
-                QString tmp = Util::getSqliteQueryStringLike(arg,"","message");
-                if(!tmp.isEmpty())
-                    queryList.append(tmp);
-            }
-        }
-        queryList.append(Util::getLevelSql(ui->cbLevel->currentIndex()));
-        QString pidText = tagListView->getQComboBox()->currentText();
-        if(pidText != "All")
-        {
-            queryList.append(QString("pid=%1").arg(pidText));
-        }
-        if(tagListView->getWidgetList()->count() > 0 && tagListView->getWidgetList()->currentItem() != NULL)
-        {
-            QString tagText = tagListView->getWidgetList()->currentItem()->text();
-            {
-                int find = tagText.lastIndexOf("(");
-                if(find >= 0)
-                {
-                    QString tt = tagText.left(find).trimmed();
-                    if(!tt.startsWith("All"))
-                        queryList.append(QString("tag=\'%1\'").arg(tt));
-                }
-            }
-        }
-        sql = queryList.join(" and ");
-    }
-    qDebug()<<"The search sql: "<<sql;
-    return sql;
+    QString tagString = (tagListView->getWidgetList() != NULL && tagListView->getWidgetList()->currentItem() != NULL)?
+                tagListView->getWidgetList()->currentItem()->text():"";
+    return dbManager->getSearchSqlString(getQueryMode(), ui->etSearch->text().trimmed(),
+                                          tagListView->getQComboBox()->currentText(),
+                                          tagString,
+                                          ui->cbLevel->currentIndex());
 }
 
 void MainWindow::selfVerticalScrollSlot(int value)
 {
-    logCurTime("内部滑动：value=" + QString::number(value) + ", mLastScrollValue=" + QString::number(mLastScrollValue));
+    Util::logCurTime("内部滑动：value=" + QString::number(value) + ", mLastScrollValue=" + QString::number(mLastScrollValue));
     int direction = 0;
     int step = value - mLastScrollValue;
     //与上一次的值作比较，判断滑动的方向，1表示向下滑动，-1表示向上滑动，0表示未滑动
@@ -716,7 +618,7 @@ void MainWindow::selfVerticalScrollSlot(int value)
         direction = -1;
     }
 
-    logCurTime("由" + QString::number(mLastScrollValue) + " >> " + QString::number(value));
+    Util::logCurTime("由" + QString::number(mLastScrollValue) + " >> " + QString::number(value));
     //如果是向下滑动
     if (direction == 1) {
         int first = mCurRange->getFirst();
@@ -788,7 +690,7 @@ void MainWindow::dispAreaData(ItemsRange *range, int direction)
     int first = range->getFirst();
     int last = range->getLast();
 
-    logCurTime("显示范围：" + QString::number(first) + " ,"
+    Util::logCurTime("显示范围：" + QString::number(first) + " ,"
                + QString::number(range->getVisibleFirst()) + " ,"
                + QString::number(range->getPageItemNum()) + " ,"
                + QString::number(range->getCount()) + " ,"
@@ -876,7 +778,7 @@ void MainWindow::updateCurRange()
 
 void MainWindow::verticalScrollSlot(int value)
 {
-    logCurTime("外部滑动：value=" + QString::number(value));
+    Util::logCurTime("外部滑动：value=" + QString::number(value));
     int visibleFirst = value;
     int first = (visibleFirst > 0) ? (visibleFirst - 1) : visibleFirst;
     int count = mCurRange->getCount();
@@ -955,13 +857,6 @@ void MainWindow::showOrHideConsoleWindow()
     showOrHideWindow(consoleDock);
 }
 
-void MainWindow::logCurTime(QString text)
-{
-#if DEBUG_SWITCH
-    qDebug()<<"【" + QDateTime::currentDateTime().toString("hh:mm:ss.zzz") + "】" + text;
-#endif
-}
-
 void MainWindow::changeFullScreenSlot()
 {
     if(this->isFullScreen())
@@ -1030,51 +925,12 @@ void MainWindow::updateByPage()
 
 void MainWindow::initPidList()
 {
-    QString select_pid_sql = "select pid from analize group by pid order by pid";
-    QSqlQuery sqlQuery(sqliteDB);
-    pidList.clear();
-    pidList.append("All");
-    if(!sqlQuery.exec(select_pid_sql))
-    {
-        qDebug()<<sqlQuery.lastError();
-    }
-    else
-    {
-        while(sqlQuery.next())
-        {
-            pidList.append(sqlQuery.value(0).toString());
-        }
-    }
+    dbManager->initPidList(pidList);
 }
 
 void MainWindow::initTagList(int pid)
 {
-    QString select_tag_sql = pid<0?
-                QString("select tag,sum(`count`) from analize group by tag"):
-                QString("select tag,sum(`count`) from analize where pid=%1 group by tag").arg(pid);
-    QSqlQuery sqlQuery(sqliteDB);
-    tagListView->getWidgetList()->clear();
-    if(!sqlQuery.exec(select_tag_sql))
-    {
-        qDebug()<<sqlQuery.lastError();
-    }
-    else
-    {
-        QString tempText;
-        int ccc = 0;
-        while(sqlQuery.next())
-        {
-            int cc = sqlQuery.value(1).toInt();
-            ccc += cc;
-            tempText = QString().sprintf(" %s(%d)",sqlQuery.value(0).toByteArray().data(),cc);
-            tagListView->getWidgetList()->addItem(tempText);
-        }
-        tagListView->getWidgetList()->insertItem(0,QString(" All Message(%1)").arg(ccc));
-        if(tagListView->getWidgetList()->count()>0)
-        {
-            tagListView->getWidgetList()->setCurrentRow(0);
-        }
-    }
+    dbManager->initTagList(pid,tagListView->getWidgetList());
 }
 
 void MainWindow::loadFileSlot()
@@ -1094,181 +950,13 @@ void MainWindow::loadFileSlot()
 
 void MainWindow::loadFiles(QStringList fileList)
 {
-    if(fileList.isEmpty())
-        return;
-    QFileInfo firstfileInfo(fileList[0]);
-    //QString targetFileName = "/home/ubuntu/.alog/"+firstfileInfo.baseName()+".log.sqlite";
-    QString targetFileName = firstfileInfo.baseName()+".log.sqlite";
-    QFile targetFileInfo(targetFileName);
-    if(targetFileInfo.exists())
-        targetFileInfo.remove();
-    //load
-    QSqlDatabase database = QSqlDatabase::addDatabase("QSQLITE","loading");
-    database.setDatabaseName(targetFileName);
-    database.open();
-    //qDebug()<<"open error: "<<database.lastError();
-    for(int i = 0;i < fileList.size();i++)
-    {
-        loadFile(fileList.at(i),targetFileName);
-    }
-
-    if(database.isOpen())
-        database.close();
-    QSqlDatabase::removeDatabase("loading");
-
-    loadLogSqliteFile(targetFileName,firstfileInfo.absoluteFilePath());
-}
-
-void MainWindow::loadFile(const QString& fileName, const QString& sqlFileName)
-{
-    QFileInfo fileInfo(fileName);
-    if(fileInfo.exists())
-    {
-        if(hasOpenedFile)
-        {
-            closeFileSlot();
-        }
-        if(fileInfo.isDir())
-        {
-           qDebug()<<"isDir";
-        }else if(fileName.endsWith(".rar"))
-        {
-            qDebug()<<"isRar";
-        }else if(fileName.endsWith(".zip"))
-        {
-            qDebug()<<"isZip";
-        }else if(fileName.endsWith(".tar.gz"))
-        {
-            qDebug()<<"isTarGz";
-        }else if(fileName.endsWith(".log") ||
-                 fileName.endsWith(".txt") ||
-                 fileName.endsWith(".logcat") ||
-                 fileInfo.baseName().contains("log"))
-        {
-            qDebug()<<"isTxt";
-            loadTextFile(fileName,sqlFileName);
-        }else
-        {
-            qDebug()<<"isTxt";
-        }
-    }
-}
-
-bool MainWindow::loadTextFile(const QString& fileName, const QString& sqlFileName)
-{
-    QFileInfo fileInfo(fileName);
-    QString targetFileName = sqlFileName.isEmpty()?fileInfo.baseName()+".log.sqlite":sqlFileName;
-    QFile logFile(fileName);
-    QFile targetFile(targetFileName);
-    QString fName = fileInfo.baseName()+fileInfo.suffix();
-
-
-        QSqlDatabase database = QSqlDatabase::database("loading");
-        //qDebug()<<"database error: "<<database.lastError();
-        QSqlQuery sql_query(database);
-
-        if(!isTableExist("logcat"))
-        {
-            QString create_sql = "create table logcat("
-                                 "id integer primary key autoincrement, "
-                                 "time datetime, "
-                                 "level char(1),"
-                                 "tag varchar(30), "
-                                 "pid integer, "
-                                 "message varchar(4096)"
-                                 ")";
-            sql_query.prepare(create_sql);
-
-            if(!sql_query.exec())
-            {
-                qDebug() << "Error: Fail to create table logcat." << sql_query.lastError();
-                return false;
-            }
-
-            qDebug() << "Table created!";
-        }
-
-        QTime    tmpTime;
-        qDebug()<<"开始解析数据";
-        tmpTime.start();
-        QRegExp exp("^(.{18}) (\\w)/(.*)\\(([\\s\\d]{5})\\):(.*)$");
-        if (!exp.isValid())
-        {
-            qDebug() << qPrintable(exp.errorString());
-            return false;
-        }
-        if (!logFile.open(QIODevice::ReadOnly|QIODevice::Text))
-            return false;
-
-        database.transaction();
-        QString insert_sql = "insert into logcat (time,level,tag,pid,message) values (?,?,?,?,?)";
-        sql_query.prepare(insert_sql);
-        QTextStream in(&logFile);
-        while (!in.atEnd())
-        {
-            QString str = in.readLine();
-            int pp = exp.indexIn(str);
-            if(pp > -1)
-            {
-                QString tag = exp.cap(3).trimmed();
-                sql_query.bindValue(0,exp.cap(1));
-                sql_query.bindValue(1,exp.cap(2));
-                sql_query.bindValue(2,tag);
-                sql_query.bindValue(3,exp.cap(4).toInt());
-                sql_query.bindValue(4,exp.cap(5));
-                if(!sql_query.exec())
-                {
-                    qDebug() << sql_query.lastError();
-                    break;
-                }
-            }
-            else
-            {
-                qDebug()<<"not match: "<<str;
-            }
-        }
-        database.commit();
-        logFile.close();
-        qDebug()<<"解析数据耗时："<<tmpTime.elapsed()<<"ms"<<endl;
-        if(!isTableExist("analize"))
-        {
-            QString createAnalizeSql = "create table analize("
-                                 "pid integer, "
-                                 "tag varchar(30), "
-                                 "count integer"
-                                 ")";
-            sql_query.prepare(createAnalizeSql);
-            if(!sql_query.exec())
-            {
-                qDebug() << "Error: Fail to create table." << sql_query.lastError();
-                return false;
-            }
-            qDebug() << "Table created!";
-        }
-
-        QString insertQuerysql = "insert into analize select pid,tag,count(*) from logcat group by pid,tag order by pid,tag";
-        if(!sql_query.exec(insertQuerysql))
-        {
-            qDebug()<<sql_query.lastError();
-            return false;
-        }
-        qDebug()<<"解析数据耗时2："<<tmpTime.elapsed()<<"ms"<<endl;
-
+    QString targetFileName = dbManager->loadFiles(fileList);
+    loadLogSqliteFile(targetFileName,targetFileName);
 }
 
 bool MainWindow::loadLogSqliteFile(const QString& filename,const QString& oname)
 {
-    if (QSqlDatabase::contains("show_logcat"))
-    {
-        sqliteDB = QSqlDatabase::database("show_logcat");
-    }else
-    {
-        sqliteDB = QSqlDatabase::addDatabase("QSQLITE","show_logcat");
-        sqliteDB.setDatabaseName(filename);
-    }
-
-    if(!sqliteDB.isOpen())
-        sqliteDB.open();
+    dbManager->open(filename);
     initTagListDock();
     beginSearch();
     hasOpenedFile = true;
@@ -1284,10 +972,7 @@ bool MainWindow::closeFileSlot()
         delete selectWholeQuery;
         selectWholeQuery = NULL;
     }
-    if (QSqlDatabase::contains("show_logcat"))
-    {
-        QSqlDatabase::removeDatabase("show_logcat");
-    }
+    dbManager->close();
     lwContent->clear();
     tagListView->getQComboBox()->clear();
     tagListView->getWidgetList()->clear();
