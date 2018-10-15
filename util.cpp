@@ -4,7 +4,7 @@
 #include <QFile>
 #include <QDebug>
 #include <QDateTime>
-#define DEBUG_SWITCH 1
+#define DEBUG_SWITCH 0
 
 static int LEVEL_VERBOSE = 0;
 static int LEVEL_DEBUG = 1;

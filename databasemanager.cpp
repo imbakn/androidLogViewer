@@ -309,12 +309,9 @@ bool DataBaseManager::loadTextFile(const QString& fileName, const QString& sqlFi
             qDebug() << "Error: Fail to create table logcat." << sql_query.lastError();
             return false;
         }
-
-        qDebug() << "Table created!";
     }
 
     QTime    tmpTime;
-    qDebug()<<"开始解析数据";
     tmpTime.start();
     QRegExp exp("^(.{18}) (\\w)/(.*)\\(([\\s\\d]{5})\\):(.*)$");
     if (!exp.isValid())
@@ -354,7 +351,7 @@ bool DataBaseManager::loadTextFile(const QString& fileName, const QString& sqlFi
     }
     database.commit();
     logFile.close();
-    qDebug()<<"解析数据耗时："<<tmpTime.elapsed()<<"ms"<<endl;
+//    qDebug()<<"解析数据耗时："<<tmpTime.elapsed()<<"ms"<<endl;
     if(!isTableExist("analize"))
     {
         QString createAnalizeSql = "create table analize("
@@ -368,7 +365,6 @@ bool DataBaseManager::loadTextFile(const QString& fileName, const QString& sqlFi
             qDebug() << "Error: Fail to create table." << sql_query.lastError();
             return false;
         }
-        qDebug() << "Table created!";
     }
 
     QString insertQuerysql = "insert into analize select pid,tag,count(*) from logcat group by pid,tag order by pid,tag";
@@ -377,5 +373,5 @@ bool DataBaseManager::loadTextFile(const QString& fileName, const QString& sqlFi
         qDebug()<<sql_query.lastError();
         return false;
     }
-    qDebug()<<"解析数据耗时2："<<tmpTime.elapsed()<<"ms"<<endl;
+//    qDebug()<<"解析数据耗时2："<<tmpTime.elapsed()<<"ms"<<endl;
 }

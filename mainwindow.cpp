@@ -223,7 +223,7 @@ bool MainWindow::execSql(const QString& table,const QString& where)
     {
         idListToSearch.append(selectWholeQuery->value(0).toInt());
     }
-    qDebug()<<"存储ID COUNT:"<<idListToSearch.size()<<" 耗时:"<<time.elapsed()<<"ms";
+//    qDebug()<<"存储ID COUNT:"<<idListToSearch.size()<<" 耗时:"<<time.elapsed()<<"ms";
     initFindList();
     return true;
 }
@@ -293,7 +293,7 @@ void MainWindow::commonInit()
     setWindowIcon(QIcon(":/logo.ico"));
 
     lwContent = ui->lwContent;
-    //lwContent->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    lwContent->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
     mCurRange = new ItemsRange(this,0,0,0,0,0);
     isConnectScroll(true);
@@ -737,11 +737,9 @@ void MainWindow::dispAreaData(ItemsRange *range, int direction)
         if (direction == 1) {
             lwContent->scrollToTop();
             lwContent->setCurrentRow(range->getVisibleFirst() + range->getPageItemNum() - 2 - first);
-            qDebug()<<"向上："<<range->getVisibleFirst() + range->getPageItemNum() - 2 - first;
         } else {
             lwContent->scrollToBottom();
             lwContent->setCurrentRow(range->getVisibleFirst() - first);
-            qDebug()<<"向下："<<range->getVisibleFirst() - first;
         }
         //重新设定滚动条的位置
         ui->verticalScrollBar->setValue(range->getVisibleFirst());
@@ -780,7 +778,7 @@ void MainWindow::verticalScrollSlot(int value)
 {
     Util::logCurTime("外部滑动：value=" + QString::number(value));
     int visibleFirst = value;
-    int first = (visibleFirst > 0) ? (visibleFirst - 1) : visibleFirst;
+    int first = (visibleFirst > 0) ? (visibleFirst - 3) : visibleFirst;
     int count = mCurRange->getCount();
     int pageItemNum = mCurRange->getPageItemNum();
     delete mCurRange;
@@ -799,7 +797,7 @@ void MainWindow::gotoLine(int line)
         return;
     isConnectScroll(false);
     visibleFirst = line - 1;
-    first = (visibleFirst > 0) ? (visibleFirst - 1) : visibleFirst;
+    first = (visibleFirst > 0) ? (visibleFirst - 3) : visibleFirst;
     delete mCurRange;
     mCurRange = new ItemsRange(this,first,visibleFirst,count,pageItemNum,totalCount);
     dispAreaData(mCurRange,0);
